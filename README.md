@@ -6,5 +6,5 @@ Contains relevant csv files
 
 ## src
 
-Contains relevant script and notebooks
+Contains relevant scripts and notebooks
 
