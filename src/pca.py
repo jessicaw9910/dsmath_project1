@@ -32,18 +32,20 @@ def project_pca(mx_input, eigenvectors, n_pc=10):
     mx_pca = (eigenvectors_subset.T @ mx_input.T).T
     return mx_pca
 
-def plot_pca(eigenvalues, img_size=(12,4), title='pca', folder='plot/', save=True):
+def plot_pca(eigenvalues, n_pc, title='pca', folder='plots/', save=True, img_size=(12,4)):
     fig = plt.figure(figsize=img_size);
     ## variance
     plt.subplot(1, 2, 1);
     plt.plot(range(len(eigenvalues)), eigenvalues);
-    plt.xlabel('$\it{k}$th principal component');
-    plt.ylabel('$\it{\sigma_k^2}$');
+    plt.vlines(n_pc, ymin=0, ymax=np.max(eigenvalues), colors='r', linewidths=2, linestyle='dashed')
+    plt.xlabel('$\it{k}$th PC', fontsize=12);
+    plt.ylabel('$\it{\sigma_k^2}$', fontsize=12);
     ## percent variance explained
     plt.subplot(1, 2, 2);
     plt.plot(range(len(eigenvalues)), np.cumsum(eigenvalues / np.sum(eigenvalues)));
-    plt.xlabel('$\it{k}$th principal component');
-    plt.ylabel('% $\it{\sigma_k^2}$ explained by $\it{k}$th PC');
+    plt.vlines(n_pc, ymin=0, ymax=1, colors='r', linewidths=2, linestyle='dashed')
+    plt.xlabel('$\it{k}$th PC', fontsize=12);
+    plt.ylabel('% $\it{\sigma_k^2}$ explained by $\it{k}$th PC', fontsize=12);
     if save:
-        plt.savefig(folder + title + '.pdf',bbox_inches='tight');
+        plt.savefig(folder + title + '.svg',bbox_inches='tight');
     plt.show();

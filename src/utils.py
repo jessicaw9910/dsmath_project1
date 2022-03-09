@@ -35,7 +35,82 @@ def import_data(path="../assets/GDSC2_fitted_dose_response_25Feb20.csv"):
     
     return df_wide, mx_gdsc, list_drug, list_cell
 
-def process_data(mx_input, percent_test=0.2, percent_val=0.2, transpose=False):
+def process_data(mx_input, percent_val=0.2, transpose=False, seed=123):
+    '''Preprocess data and return indices, masks, and centered data
+    
+    Params:
+    - mx_input (numpy.ndarray): input matrix
+    - precent_val (float): percent of training data allocated to validation
+    - transpose (bool): if True drug x cell else cell x drug
+    - seed (int): set seed for reproducibility
+    
+    Output:
+    - mx_center (numpy.ndarray): matrix of lnIC50 centered by drug (drug x cell if transpose=True, else cell x drug) 
+    - mx_train (numpy.ndarray): same as above but using mean from training data and imputing for val/test splits 
+    - idx_val (numpy.ndarray): indices of validation data
+    - idx_train (numpy.ndarray): indices of training data
+    - mask_val (numpy.ndarray): boolean mask of validation data
+    - mask_train (numpy.ndarray): boolean mask of training data
+    '''
+    np.random.seed(seed)
+    
+    n_cell, n_drug = mx_input.shape
+    n_total = mx_input.size
+    
+    if transpose:
+        ## drug x cell
+        mx_input = mx_input.T
+        
+    ## masks for missing, flatten indices, and shuffle
+    mask_missing = np.isnan(mx_input)
+    idx_nonmissing = np.flatnonzero(~mask_missing)
+    idx_shuffle = idx_nonmissing[np.random.permutation(np.arange(len(idx_nonmissing)))]
+
+    ## train/val split
+    n_val = int(np.rint(np.sum(~mask_missing) * percent_val))
+    n_train = int(np.sum(~mask_missing) - n_val)
+
+    ## find index for train/val
+    idx_val = idx_shuffle[:n_val]
+    idx_train = idx_shuffle[n_val:(n_val + n_train)]
+
+    ## create mask for train/val
+    mask_val = np.array([True if x in idx_val else False for x in range(n_total)])
+    mask_train = np.array([True if x in idx_train else False for x in range(n_total)])
+    if transpose:
+        ## drug x cell
+        mask_val = mask_val.reshape((n_drug, n_cell))
+        mask_train = mask_train.reshape((n_drug, n_cell)) 
+    else:
+        ## cell x drug
+        mask_val = mask_val.reshape((n_cell, n_drug))
+        mask_train = mask_train.reshape((n_cell, n_drug))
+        
+    ## mean center data by drug for total and training
+    ## drug x cell
+    if transpose:
+        ## for total data
+        mean_total = np.nanmean(mx_input, axis=1)[:, np.newaxis]
+        mx_center = np.where(mask_missing, mean_total, mx_input)
+        mx_center = mx_center - mean_total
+        ## for training data
+        mean_train = np.ma.mean(np.ma.array(mx_input, mask=~mask_train), axis=1)[:, np.newaxis]
+        mx_train = np.where(~mask_train, mean_train, mx_input)
+        mx_train = mx_train - np.mean(mx_train, axis = 1)[:, np.newaxis]
+    ## cell x drug
+    else:
+        ## for total data
+        mean_total = np.nanmean(mx_input, axis=0)
+        mx_center = np.where(mask_missing, mean_total, mx_input)
+        mx_center = mx_center - mean_total
+        ## for training data
+        mean_train = np.ma.mean(np.ma.array(mx_input, mask=~mask_train), axis=0)
+        mx_train = np.where(~mask_train, mean_train, mx_input)
+        mx_train = mx_train - np.mean(mx_train, axis = 0)
+        
+    return mx_center, mx_train, idx_val, idx_train, mask_val, mask_train
+
+def process_test(mx_input, percent_test=0.2, percent_val=0.2, transpose=False, seed=123):
     '''Preprocess data and return indices, masks, and centered data
     
     Params:
@@ -45,7 +120,8 @@ def process_data(mx_input, percent_test=0.2, percent_val=0.2, transpose=False):
     - transpose (bool): if True drug x cell else cell x drug
     
     Output:
-    - mx_train (numpy.ndarray): matrix of lnIC50 centered by drug (drug x cell if transpose=True, else cell x drug) 
+    - mx_center (numpy.ndarray): matrix of lnIC50 centered by drug (drug x cell if transpose=True, else cell x drug) 
+    - mx_train (numpy.ndarray): same as above but using mean from training data and imputing for val/test splits 
     - idx_test (numpy.ndarray): indices of test data
     - idx_val (numpy.ndarray): indices of validation data
     - idx_train (numpy.ndarray): indices of training data
@@ -53,6 +129,8 @@ def process_data(mx_input, percent_test=0.2, percent_val=0.2, transpose=False):
     - mask_val (numpy.ndarray): boolean mask of validation data
     - mask_train (numpy.ndarray): boolean mask of training data
     '''
+    np.random.seed(seed)
+    
     n_cell, n_drug = mx_input.shape
     n_total = mx_input.size
     
@@ -73,33 +151,43 @@ def process_data(mx_input, percent_test=0.2, percent_val=0.2, transpose=False):
     ## find index for train/val/test
     idx_test = idx_shuffle[:n_test]
     idx_val = idx_shuffle[n_test:(n_test + n_val)]
-    idx_train = idx_shuffle[n_test:(n_test + n_val + n_train)]
+    idx_train = idx_shuffle[(n_test + n_val):(n_test + n_val + n_train)]
 
     ## create mask for train/val/test
     mask_test = np.array([True if x in idx_test else False for x in range(n_total)])
     mask_val = np.array([True if x in idx_val else False for x in range(n_total)])
     mask_train = np.array([True if x in idx_train else False for x in range(n_total)])
+    ## drug x cell
     if transpose:
-        ## drug x cell
         mask_test = mask_test.reshape((n_drug, n_cell))
         mask_val = mask_val.reshape((n_drug, n_cell))
         mask_train = mask_train.reshape((n_drug, n_cell)) 
+    ## cell x drug
     else:
-        ## cell x drug
         mask_test = mask_test.reshape((n_cell, n_drug))
         mask_val = mask_val.reshape((n_cell, n_drug))
         mask_train = mask_train.reshape((n_cell, n_drug))
         
-    ## mean center data by drug
+    ## mean center data by drug for total and training
+    ## drug x cell
     if transpose:
-        ## drug x cell
+        ## for total data
+        mean_total = np.nanmean(mx_input, axis=1)[:, np.newaxis]
+        mx_center = np.where(mask_missing, mean_total, mx_input)
+        mx_center = mx_center - mean_total
+        ## for training data
         mean_train = np.ma.mean(np.ma.array(mx_input, mask=~mask_train), axis=1)[:, np.newaxis]
         mx_train = np.where(~mask_train, mean_train, mx_input)
         mx_train = mx_train - np.mean(mx_train, axis = 1)[:, np.newaxis]
+    ## cell x drug
     else:
-        ## cell x drug
+        ## for total data
+        mean_total = np.nanmean(mx_input, axis=0)
+        mx_center = np.where(mask_missing, mean_total, mx_input)
+        mx_center = mx_center - mean_total
+        ## for training data
         mean_train = np.ma.mean(np.ma.array(mx_input, mask=~mask_train), axis=0)
         mx_train = np.where(~mask_train, mean_train, mx_input)
         mx_train = mx_train - np.mean(mx_train, axis = 0)
         
-    return mx_train, idx_test, idx_val, idx_train, mask_test, mask_val, mask_train
+    return mx_center, mx_train, idx_test, idx_val, idx_train, mask_test, mask_val, mask_train

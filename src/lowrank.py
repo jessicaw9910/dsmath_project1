@@ -2,7 +2,7 @@
 
 import numpy as np
 
-def fit_svd(matrix_init, index_train, rank=5, n_iter=100, thresh=1e-4, verbose=False):
+def fit_svd(matrix_init, matrix_actual, index_train, rank=5, n_iter=100, thresh=1e-4, verbose=False):
     '''Fit SVD model iteratively
 
     Params:
@@ -13,6 +13,8 @@ def fit_svd(matrix_init, index_train, rank=5, n_iter=100, thresh=1e-4, verbose=F
     thresh: the threshold of convergence to 0
     verbose:   
     '''
+    ## pre-calculate actual training values
+    y_train = matrix_actual.flat[index_train]
     ## initialize yhat 
     yhat = matrix_init
     
@@ -24,7 +26,6 @@ def fit_svd(matrix_init, index_train, rank=5, n_iter=100, thresh=1e-4, verbose=F
         yhat = U[:,:rank] @ np.diag(s)[:rank,:rank] @ V[:rank,:]
         
         ## calculate RMSE
-        y_train = matrix_init.flat[index_train]
         yhat_train = yhat.flat[index_train]
         RMSE = np.sqrt(np.mean((y_train - yhat_train)**2))
         
