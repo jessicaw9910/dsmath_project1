@@ -93,6 +93,7 @@ n_all <- length(unique(df_drug$knn_all))
 n_pca <- length(unique(df_drug$knn_pca))
 n_svd <- length(unique(df_drug$knn_svd))
 
+## plot KNN results for all data
 df_drug %>% ggplot(aes(x=tsne1, y=tsne2, 
                        color=pathway_name, shape=factor(knn_all))) +
   geom_point(aes(size = inv_IC50)) +
@@ -106,6 +107,7 @@ df_drug %>% ggplot(aes(x=tsne1, y=tsne2,
   guides(color=guide_legend(title="Drug Pathway", ncol=1, 
                             override.aes = list(size=6)))
   
+## plot KNN results for PCA
 df_drug %>% ggplot(aes(x=tsne1, y=tsne2, 
                        color=pathway_name, shape=factor(knn_pca))) +
   geom_point(aes(size = inv_IC50)) +
@@ -119,6 +121,7 @@ df_drug %>% ggplot(aes(x=tsne1, y=tsne2,
   guides(color=guide_legend(title="Drug Pathway", ncol=1, 
                             override.aes = list(size=6)))
 
+## plot KNN results for SVD
 df_drug %>% ggplot(aes(x=tsne1, y=tsne2, 
                        color=pathway_name, shape=factor(knn_svd))) +
   geom_point(aes(size = inv_IC50)) +
@@ -136,8 +139,6 @@ df_drug %>% ggplot(aes(x=tsne1, y=tsne2,
 #### Low-Rank Drug Model ####
 #############################
   
-dim(df_drug_lrm)
-
 colnames(df_drug_lrm) <- paste(rep('V', 10), 
                                seq(1, dim(df_drug_lrm)[2]), sep = "")
 
@@ -174,8 +175,8 @@ ggplot(df_drug_top10_combo, aes(x=V, y=inv_IC50)) +
   guides(color=guide_legend(title="Drug Pathway", ncol=1, 
                             override.aes = list(size=6)))
 
-ggsave('../src/plots/Top10_Boxplot_Drug.png', width = 12, height = 8)
-ggsave('../src/plots/Top10_Boxplot_Drug.svg', width = 12, height = 6)
+ggsave('plots/Top10_Boxplot_Drug.png', width = 12, height = 8)
+ggsave('plots/Top10_Boxplot_Drug.svg', width = 12, height = 6)
 
 # df_stacked_top <- df_drug_top10[idx_top, ] %>% 
 #   count(V, pathway_name, sort = TRUE)
@@ -218,8 +219,8 @@ ggplot(df_stacked, aes(x = V, y = percent, fill = pathway_name)) +
   guides(fill=guide_legend(title="Drug Pathway", ncol=1, 
                             override.aes = list(size=6)))
 
-ggsave('../src/plots/Top10_Stacked Bar_Drug.png', width = 12, height = 8)
-ggsave('../src/plots/Top10_Stacked Bar_Drug.svg', width = 12, height = 6)
+ggsave('plots/Top10_Stacked Bar_Drug.png', width = 12, height = 8)
+ggsave('plots/Top10_Stacked Bar_Drug.svg', width = 12, height = 6)
 
 # ggplot(df_stacked, aes(x = V, y = percent, fill = pathway_name)) + 
 #   geom_bar(stat = "identity") +
@@ -281,8 +282,8 @@ ggplot(df_cell_top10_combo, aes(x=U, y=inv_IC50)) +
   guides(color=guide_legend(title="Tissue", ncol=1, 
                             override.aes = list(size=6)))
 
-ggsave('../src/plots/Top10_Boxplot_Cell.png', width = 12, height = 8)
-ggsave('../src/plots/Top10_Boxplot_Cell.svg', width = 12, height = 6)
+ggsave('plots/Top10_Boxplot_Cell.png', width = 12, height = 8)
+ggsave('plots/Top10_Boxplot_Cell.svg', width = 12, height = 6)
 
 df_stacked_top <- df_cell_top10[idx_top, ] %>%
   group_by(U, tissue) %>%
@@ -314,13 +315,85 @@ ggplot(df_stacked, aes(x = U, y = percent, fill = tissue)) +
   guides(fill=guide_legend(title="Tissue", ncol=1, 
                            override.aes = list(size=6)))
 
-ggsave('../src/plots/Top10_Stacked Bar_Cell.png', width = 12, height = 8)
-ggsave('../src/plots/Top10_Stacked Bar_Cell.svg', width = 12, height = 6)
+ggsave('plots/Top10_Stacked Bar_Cell.png', width = 12, height = 8)
+ggsave('plots/Top10_Stacked Bar_Cell.svg', width = 12, height = 6)
 
 ####################################
 #### Compare K-Means Clustering ####
 ####################################
 
-View(df_cell)
+## for drug clusters
+cols <- c('drug_name', 'knn_all', 'knn_pca', 'knn_svd', 'pathway_name')
 
-df_cell_clust <- df_cel
+df_knn_drug <- df_drug[, cols]
+df_knn_drug <- melt(df_knn_drug, id.vars = c('drug_name', 'pathway_name'))
+colnames(df_knn_drug)[dim(df_knn_drug)[2]] <- 'cluster'
+colnames(df_knn_drug)[dim(df_knn_drug)[2]-1] <- 'representation'
+
+df_knn_drug <- df_knn_drug %>%
+  group_by(cluster, pathway_name, representation) %>%
+  summarise(all_names = paste(drug_name, collapse = ", "))
+
+df_knn_drug$count <- str_count(df_knn_drug$all_names, ",") + 1
+df_knn_drug$cluster <- as.factor(df_knn_drug$cluster)
+
+ggplot(df_knn_drug, aes(x=cluster, y=count, fill=pathway_name)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~representation, dir = 'v')
+
+df_sum_drug <- aggregate(count ~ cluster + representation, df_knn_drug, sum)
+colnames(df_sum_drug)[dim(df_sum_drug)[2]] <- 'total'
+
+df_knn_drug <- merge(df_knn_drug, df_sum_drug, by=c('cluster', 'representation'))
+
+df_knn_drug$percent <- df_knn_drug$count / df_knn_drug$total
+df_knn_drug <- merge(df_knn_drug, df_path, by='pathway_name')
+df_knn_drug$representation <- gsub(pattern = 'knn_', replacement = '', df_knn_drug$representation)
+df_knn_drug$representation <- sapply(df_knn_drug$representation, function(x) ifelse(x!='all', toupper(x), 'All'))
+
+# df_knn_drug$dominant <- (df_knn_drug$percent >= 0.4)
+# df_knn_drug[df_knn_drug$dominant == TRUE, ] %>% View()
+# table(df_knn_drug$representation[df_knn_drug$dominant == TRUE])
+# df_knn_drug$label <- mapply(FUN = function(x, y, z) ifelse(x == TRUE, y , z),
+#                             df_knn_drug$dominant, 
+#                             df_knn_drug$pathway_name, 
+#                             df_knn_drug$cluster)
+
+df_temp <- df_knn_drug[(df_knn_drug$percent >= 0.4), c('pathway_name', 'cluster', 'representation')]
+colnames(df_temp)[1] <- 'label'
+
+df_knn_drug <- merge(df_knn_drug, df_temp, by = c('cluster', 'representation'), all.x = TRUE)
+
+ggplot(df_knn_drug[!is.na(df_knn_drug$label), ], aes(x=label, y=percent, fill=pathway_short)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~representation, dir = 'v') +
+  scale_y_continuous(labels = scales::percent_format()) +
+  geom_text(aes(label=stringr::str_wrap(all_names, 5)),
+            size = 2, position = position_fill(vjust = 0.5)) +
+  # geom_text(aes(label=paste(pathway_short, count, sep=": ")),
+  #           size = 3, position = position_fill(vjust = 0.5)) +
+  xlab('Cluster') +
+  ylab('Percent') +
+  # theme(legend.position = "none")
+  guides(fill=guide_legend(title="Drug Pathway", ncol=1, 
+                            override.aes = list(size=6)))
+
+ggsave('plots/Drug_Clusters.png', width = 12, height = 8)
+ggsave('plots/Drug_Clusters.svg', width = 12, height = 6)
+
+## unlabeled
+df_unlabeled_drug <- df_knn_drug[is.na(df_knn_drug$label), ]
+
+ggplot(df_unlabeled_drug, aes(x=cluster, y=percent, fill=pathway_short)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~representation, dir = 'v') +
+  scale_y_continuous(labels = scales::percent_format()) +
+  # geom_text(aes(label=stringr::str_wrap(all_names, 5)),
+  #           size = 2, position = position_fill(vjust = 0.5)) +
+  geom_text(aes(label=paste(pathway_short, count, sep=": ")),
+            size = 2, position = position_fill(vjust = 0.5)) +
+  xlab('Cluster') +
+  ylab('Percent') +
+  theme(legend.position = "none")
+  # guides(color=guide_legend(title="Drug Pathway", ncol=1, 
+  #                           override.aes = list(size=6)))
